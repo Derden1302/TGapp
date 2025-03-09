@@ -1,15 +1,429 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Mini App</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>Тетрис (управление с телефона)</title>
+  <style>
+    /* Сброс и базовые стили */
+    * {
+      margin: 0; 
+      padding: 0; 
+      box-sizing: border-box;
+    }
+    body {
+      background: #222;
+      display: flex;
+      flex-direction: column; /* чтобы блоки шли сверху вниз */
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: sans-serif;
+      color: #fff;
+    }
+
+    /* Контейнер с игрой */
+    #game-container {
+      position: relative;
+      width: 200px;      /* ширина поля */
+      height: 400px;     /* высота поля */
+      border: 2px solid #fff;
+      background: #000;
+    }
+
+    /* Сам <canvas> */
+    #tetris {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Информация (счёт, таймер) */
+    #info {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-size: 14px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    /* Сообщение «Игра окончена» */
+    #gameOver {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.7);
+      padding: 16px 24px;
+      font-size: 20px;
+      border-radius: 8px;
+      display: none;
+      text-align: center;
+    }
+
+    /* Кнопки управления для телефона */
+    #controls {
+      margin-top: 12px; /* отступ сверху, чтобы не липли к полю */
+      display: flex;
+      flex-wrap: wrap; 
+      gap: 8px; /* расстояние между кнопками */
+      justify-content: center;
+    }
+    #controls button {
+      font-size: 20px;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #555;
+      color: #fff;
+      cursor: pointer;
+    }
+    #controls button:active {
+      background: #777;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Даня гей</h1>
+
+  <!-- Поле игры -->
+  <div id="game-container">
+    <canvas id="tetris" width="200" height="400"></canvas>
+
+    <!-- Информация (время, счёт) -->
+    <div id="info">
+      Время: <span id="timer">60</span> сек.<br>
+      Счёт: <span id="score">0</span>
     </div>
-    <script src="script.js"></script>
+
+    <!-- Сообщение об окончании -->
+    <div id="gameOver">Игра окончена!</div>
+  </div>
+
+  <!-- Кнопки для управления на телефоне -->
+  <div id="controls">
+    <button id="btn-left">←</button>
+    <button id="btn-rotate">⟳</button>
+    <button id="btn-right">→</button>
+    <button id="btn-down">↓</button>
+  </div>
+
+  <script>
+  /*************************************************
+   * ВЕСЬ КОД ТЕТРИСА
+   *************************************************/
+
+  // Ссылки на элементы
+  const canvas = document.getElementById('tetris');
+  const ctx = canvas.getContext('2d');
+  const timerElement = document.getElementById('timer');
+  const scoreElement = document.getElementById('score');
+  const gameOverElement = document.getElementById('gameOver');
+
+  // Параметры поля (в ячейках)
+  const COLS = 10;
+  const ROWS = 20;
+
+  // Матрица для арены
+  function createMatrix(w, h) {
+    const matrix = [];
+    for (let i = 0; i < h; i++) {
+      matrix.push(new Array(w).fill(0));
+    }
+    return matrix;
+  }
+  let arena = createMatrix(COLS, ROWS);
+
+  // Тетрамино (фигуры) и их цвета
+  const tetrominos = {
+    'T': [
+      [0, 1, 0],
+      [1, 1, 1],
+      [0, 0, 0]
+    ],
+    'O': [
+      [2, 2],
+      [2, 2]
+    ],
+    'L': [
+      [0, 3, 0],
+      [0, 3, 0],
+      [0, 3, 3]
+    ],
+    'J': [
+      [0, 4, 0],
+      [0, 4, 0],
+      [4, 4, 0]
+    ],
+    'I': [
+      [0, 5, 0, 0],
+      [0, 5, 0, 0],
+      [0, 5, 0, 0],
+      [0, 5, 0, 0]
+    ],
+    'S': [
+      [0, 6, 6],
+      [6, 6, 0],
+      [0, 0, 0]
+    ],
+    'Z': [
+      [7, 7, 0],
+      [0, 7, 7],
+      [0, 0, 0]
+    ]
+  };
+
+  const colors = [
+    null,
+    'purple', // 1
+    'yellow', // 2
+    'orange', // 3
+    'blue',   // 4
+    'cyan',   // 5
+    'green',  // 6
+    'red'     // 7
+  ];
+
+  // Игрок (текущая фигура)
+  const player = {
+    pos: {x: 0, y: 0},
+    matrix: null,
+    score: 0
+  };
+
+  /*************************************************
+   * Функции для работы с матрицами
+   *************************************************/
+  // Рисуем матрицу (фигуру/поле) на canvas с учётом смещения offset
+  function drawMatrix(matrix, offset) {
+    matrix.forEach((row, y) => {
+      row.forEach((value, x) => {
+        if (value !== 0) {
+          ctx.fillStyle = colors[value];
+          ctx.fillRect(x + offset.x, y + offset.y, 1, 1);
+        }
+      });
+    });
+  }
+
+  // Слияние фигуры с ареной
+  function merge(arena, player) {
+    player.matrix.forEach((row, y) => {
+      row.forEach((value, x) => {
+        if (value !== 0) {
+          arena[y + player.pos.y][x + player.pos.x] = value;
+        }
+      });
+    });
+  }
+
+  // Проверка столкновения
+  function collide(arena, player) {
+    const m = player.matrix;
+    const o = player.pos;
+    for (let y = 0; y < m.length; y++) {
+      for (let x = 0; x < m[y].length; x++) {
+        if (
+          m[y][x] !== 0 &&
+          (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Поворот матрицы на 90 градусов (по часовой стрелке)
+  function rotate(matrix) {
+    // Транспонирование
+    for (let y = 0; y < matrix.length; y++) {
+      for (let x = 0; x < y; x++) {
+        [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+      }
+    }
+    // Реверс каждой строки
+    matrix.forEach(row => row.reverse());
+  }
+
+  /*************************************************
+   * Игровой цикл
+   *************************************************/
+  // Отрисовка сцены
+  function draw() {
+    // Очищаем весь canvas
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Рисуем арену
+    drawMatrix(arena, {x:0, y:0});
+    // Рисуем текущую фигуру
+    drawMatrix(player.matrix, player.pos);
+  }
+
+  let dropCounter = 0;
+  let dropInterval = 500; // скорость падения (мс)
+  let lastTime = 0;
+  let requestId = null;
+
+  function update(time = 0) {
+    const deltaTime = time - lastTime;
+    lastTime = time;
+    dropCounter += deltaTime;
+    if (dropCounter > dropInterval) {
+      playerDrop();
+    }
+    draw();
+    requestId = requestAnimationFrame(update);
+  }
+
+  // Функция опускания фигуры
+  function playerDrop() {
+    player.pos.y++;
+    if (collide(arena, player)) {
+      player.pos.y--;
+      merge(arena, player);
+      arenaSweep();
+      playerReset();
+    }
+    dropCounter = 0;
+  }
+
+  // Очистка заполненных линий
+  function arenaSweep() {
+    let rowCount = 1;
+    for (let y = arena.length - 1; y >= 0; y--) {
+      if (arena[y].every(cell => cell !== 0)) {
+        arena.splice(y, 1);
+        arena.unshift(new Array(COLS).fill(0));
+        player.score += rowCount * 10;
+        rowCount *= 2;
+      }
+    }
+    scoreElement.textContent = player.score;
+  }
+
+  // Создание новой фигуры
+  function playerReset() {
+    const tetrominoNames = 'TOLJISZ';
+    const rand = tetrominoNames[Math.floor(Math.random() * tetrominoNames.length)];
+    player.matrix = tetrominos[rand];
+    // Ставим фигуру сверху (по центру)
+    player.pos.y = 0;
+    player.pos.x = (COLS / 2 | 0) - (player.matrix[0].length / 2 | 0);
+    // Если сразу коллизия — конец
+    if (collide(arena, player)) {
+      gameOver();
+    }
+  }
+
+  // Движение влево/вправо
+  function playerMove(dir) {
+    player.pos.x += dir;
+    if (collide(arena, player)) {
+      player.pos.x -= dir;
+    }
+  }
+
+  // Поворот фигуры
+  function playerRotate() {
+    const pos = player.pos.x;
+    rotate(player.matrix);
+    let offset = 1;
+    while (collide(arena, player)) {
+      player.pos.x += offset;
+      offset = -(offset + (offset > 0 ? 1 : -1));
+      if (Math.abs(offset) > player.matrix[0].length) {
+        // Отменяем поворот, если слишком далеко ушли
+        rotate(player.matrix); 
+        rotate(player.matrix); 
+        rotate(player.matrix);
+        player.pos.x = pos;
+        return;
+      }
+    }
+  }
+
+  /*************************************************
+   * Таймер и завершение игры
+   *************************************************/
+  let timeLeft = 60; // секунд
+  let timerInterval = null;
+
+  function updateTimer() {
+    timeLeft--;
+    timerElement.textContent = timeLeft;
+    if (timeLeft <= 0) {
+      gameOver();
+    }
+  }
+
+  // Окончание игры
+  function gameOver() {
+    clearInterval(timerInterval);
+    cancelAnimationFrame(requestId);
+    gameOverElement.style.display = 'block';
+  }
+
+  /*************************************************
+   * Управление
+   *************************************************/
+  // Клавиатура (ПК)
+  document.addEventListener('keydown', event => {
+    switch (event.keyCode) {
+      case 37: // Влево
+        playerMove(-1);
+        break;
+      case 39: // Вправо
+        playerMove(1);
+        break;
+      case 40: // Вниз
+        playerDrop();
+        break;
+      case 38: // Вверх
+        playerRotate();
+        break;
+    }
+  });
+
+  // Кнопки для телефона
+  const btnLeft   = document.getElementById('btn-left');
+  const btnRight  = document.getElementById('btn-right');
+  const btnRotate = document.getElementById('btn-rotate');
+  const btnDown   = document.getElementById('btn-down');
+
+  btnLeft.addEventListener('click',   () => playerMove(-1));
+  btnRight.addEventListener('click',  () => playerMove(1));
+  btnRotate.addEventListener('click', () => playerRotate());
+  btnDown.addEventListener('click',   () => playerDrop());
+
+  /*************************************************
+   * Запуск игры
+   *************************************************/
+  function startGame() {
+    // Сброс арены и счёта
+    arena = createMatrix(COLS, ROWS);
+    player.score = 0;
+    scoreElement.textContent = player.score;
+    // Сброс времени
+    timeLeft = 60;
+    timerElement.textContent = timeLeft;
+    gameOverElement.style.display = 'none';
+
+    // Новая фигура
+    playerReset();
+
+    // Запуск таймера (каждую секунду уменьшается время)
+    timerInterval = setInterval(updateTimer, 1000);
+
+    // Запуск игрового цикла
+    dropCounter = 0;
+    lastTime = 0;
+    requestId = requestAnimationFrame(update);
+  }
+
+  // Запускаем игру сразу
+  startGame();
+  </script>
 </body>
 </html>
