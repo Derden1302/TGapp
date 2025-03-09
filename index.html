@@ -2,53 +2,60 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Тетрис (управление с телефона)</title>
+  <title>Тетрис (большие фигуры, по центру)</title>
+  <!-- Для корректного отображения на телефонах -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+
   <style>
     /* Сброс и базовые стили */
-    * {
-      margin: 0; 
-      padding: 0; 
-      box-sizing: border-box;
-    }
-    body {
-      background: #222;
-      display: flex;
-      flex-direction: column; /* чтобы блоки шли сверху вниз */
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      font-family: sans-serif;
-      color: #fff;
-    }
-
-    /* Контейнер с игрой */
-    #game-container {
-      position: relative;
-      width: 200px;      /* ширина поля */
-      height: 400px;     /* высота поля */
-      border: 2px solid #fff;
-      background: #000;
-    }
-
-    /* Сам <canvas> */
-    #tetris {
-      display: block;
+    html, body {
+      margin: 0;
+      padding: 0;
       width: 100%;
       height: 100%;
+      background: #222;
+      color: #fff;
+      font-family: sans-serif;
+    }
+    /* Центрируем всю страницу по вертикали и горизонтали */
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
 
-    /* Информация (счёт, таймер) */
+    /* Контейнер с игрой (300×600 пикселей) */
+    #game-container {
+      width: 300px;   /* ширина в пикселях */
+      height: 600px;  /* высота в пикселях */
+      position: relative;
+      border: 2px solid #fff;
+      background: #000;
+      display: flex;
+      /* При желании можно добавить margin, но не обязательно */
+      margin-bottom: 10px;
+    }
+
+    /* Сам <canvas>, растягивается на весь контейнер 300×600 */
+    #tetris {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Блок с информацией (счёт, время) */
     #info {
       position: absolute;
       top: 8px;
       left: 8px;
       font-size: 14px;
-      background: rgba(0, 0, 0, 0.4);
+      background: rgba(0,0,0,0.4);
       padding: 4px 8px;
       border-radius: 4px;
     }
 
-    /* Сообщение «Игра окончена» */
+    /* Сообщение об окончании игры */
     #gameOver {
       position: absolute;
       top: 50%;
@@ -62,13 +69,12 @@
       text-align: center;
     }
 
-    /* Кнопки управления для телефона */
+    /* Кнопки управления (для телефона) */
     #controls {
-      margin-top: 12px; /* отступ сверху, чтобы не липли к полю */
       display: flex;
-      flex-wrap: wrap; 
-      gap: 8px; /* расстояние между кнопками */
       justify-content: center;
+      gap: 8px;
+      margin-bottom: 10px;
     }
     #controls button {
       font-size: 20px;
@@ -86,11 +92,12 @@
 </head>
 <body>
 
-  <!-- Поле игры -->
+  <!-- Контейнер с игрой (300×600) -->
   <div id="game-container">
+    <!-- Холст 200×400 (логические единицы), но в CSS растягивается 300×600 -->
     <canvas id="tetris" width="200" height="400"></canvas>
 
-    <!-- Информация (время, счёт) -->
+    <!-- Информация (таймер, счёт) -->
     <div id="info">
       Время: <span id="timer">60</span> сек.<br>
       Счёт: <span id="score">0</span>
@@ -100,7 +107,7 @@
     <div id="gameOver">Игра окончена!</div>
   </div>
 
-  <!-- Кнопки для управления на телефоне -->
+  <!-- Кнопки для телефона -->
   <div id="controls">
     <button id="btn-left">←</button>
     <button id="btn-rotate">⟳</button>
@@ -110,21 +117,21 @@
 
   <script>
   /*************************************************
-   * ВЕСЬ КОД ТЕТРИСА
+   *  ЛОГИКА ТЕТРИСА (JS)
    *************************************************/
 
-  // Ссылки на элементы
+  // Получаем ссылки на элементы
   const canvas = document.getElementById('tetris');
   const ctx = canvas.getContext('2d');
   const timerElement = document.getElementById('timer');
   const scoreElement = document.getElementById('score');
   const gameOverElement = document.getElementById('gameOver');
 
-  // Параметры поля (в ячейках)
+  // Размер поля в ячейках (10×20)
   const COLS = 10;
   const ROWS = 20;
 
-  // Матрица для арены
+  // Создаём двумерный массив (матрицу) для игрового поля
   function createMatrix(w, h) {
     const matrix = [];
     for (let i = 0; i < h; i++) {
@@ -134,7 +141,7 @@
   }
   let arena = createMatrix(COLS, ROWS);
 
-  // Тетрамино (фигуры) и их цвета
+  // Набор фигур (тетрамино)
   const tetrominos = {
     'T': [
       [0, 1, 0],
@@ -173,6 +180,7 @@
     ]
   };
 
+  // Цвета (индекс 1..7)
   const colors = [
     null,
     'purple', // 1
@@ -192,9 +200,9 @@
   };
 
   /*************************************************
-   * Функции для работы с матрицами
+   *  Работа с матрицами
    *************************************************/
-  // Рисуем матрицу (фигуру/поле) на canvas с учётом смещения offset
+  // Рисуем матрицу на canvas, учитывая смещение offset
   function drawMatrix(matrix, offset) {
     matrix.forEach((row, y) => {
       row.forEach((value, x) => {
@@ -217,7 +225,7 @@
     });
   }
 
-  // Проверка столкновения
+  // Проверка столкновений
   function collide(arena, player) {
     const m = player.matrix;
     const o = player.pos;
@@ -236,22 +244,22 @@
 
   // Поворот матрицы на 90 градусов (по часовой стрелке)
   function rotate(matrix) {
-    // Транспонирование
+    // Транспонируем
     for (let y = 0; y < matrix.length; y++) {
       for (let x = 0; x < y; x++) {
         [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
       }
     }
-    // Реверс каждой строки
+    // Реверс строк
     matrix.forEach(row => row.reverse());
   }
 
   /*************************************************
-   * Игровой цикл
+   *  Игровой цикл
    *************************************************/
-  // Отрисовка сцены
+  // Отрисовка
   function draw() {
-    // Очищаем весь canvas
+    // Очищаем холст
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -262,7 +270,7 @@
   }
 
   let dropCounter = 0;
-  let dropInterval = 500; // скорость падения (мс)
+  let dropInterval = 500; // скорость падения, мс
   let lastTime = 0;
   let requestId = null;
 
@@ -277,7 +285,7 @@
     requestId = requestAnimationFrame(update);
   }
 
-  // Функция опускания фигуры
+  // Опускание фигуры
   function playerDrop() {
     player.pos.y++;
     if (collide(arena, player)) {
@@ -289,7 +297,7 @@
     dropCounter = 0;
   }
 
-  // Очистка заполненных линий
+  // Удаление заполненных линий
   function arenaSweep() {
     let rowCount = 1;
     for (let y = arena.length - 1; y >= 0; y--) {
@@ -308,7 +316,7 @@
     const tetrominoNames = 'TOLJISZ';
     const rand = tetrominoNames[Math.floor(Math.random() * tetrominoNames.length)];
     player.matrix = tetrominos[rand];
-    // Ставим фигуру сверху (по центру)
+    // Ставим сверху, по центру
     player.pos.y = 0;
     player.pos.x = (COLS / 2 | 0) - (player.matrix[0].length / 2 | 0);
     // Если сразу коллизия — конец
@@ -334,9 +342,9 @@
       player.pos.x += offset;
       offset = -(offset + (offset > 0 ? 1 : -1));
       if (Math.abs(offset) > player.matrix[0].length) {
-        // Отменяем поворот, если слишком далеко ушли
-        rotate(player.matrix); 
-        rotate(player.matrix); 
+        // Отменяем поворот
+        rotate(player.matrix);
+        rotate(player.matrix);
         rotate(player.matrix);
         player.pos.x = pos;
         return;
@@ -345,9 +353,9 @@
   }
 
   /*************************************************
-   * Таймер и завершение игры
+   *  Таймер и конец игры
    *************************************************/
-  let timeLeft = 60; // секунд
+  let timeLeft = 60;
   let timerInterval = null;
 
   function updateTimer() {
@@ -358,7 +366,7 @@
     }
   }
 
-  // Окончание игры
+  // Завершение игры
   function gameOver() {
     clearInterval(timerInterval);
     cancelAnimationFrame(requestId);
@@ -366,27 +374,27 @@
   }
 
   /*************************************************
-   * Управление
+   *  Управление
    *************************************************/
-  // Клавиатура (ПК)
+  // Клавиатура
   document.addEventListener('keydown', event => {
     switch (event.keyCode) {
-      case 37: // Влево
+      case 37: // ←
         playerMove(-1);
         break;
-      case 39: // Вправо
+      case 39: // →
         playerMove(1);
         break;
-      case 40: // Вниз
+      case 40: // ↓
         playerDrop();
         break;
-      case 38: // Вверх
+      case 38: // ↑
         playerRotate();
         break;
     }
   });
 
-  // Кнопки для телефона
+  // Кнопки (телефон)
   const btnLeft   = document.getElementById('btn-left');
   const btnRight  = document.getElementById('btn-right');
   const btnRotate = document.getElementById('btn-rotate');
@@ -401,28 +409,23 @@
    * Запуск игры
    *************************************************/
   function startGame() {
-    // Сброс арены и счёта
+    // Сброс
     arena = createMatrix(COLS, ROWS);
     player.score = 0;
-    scoreElement.textContent = player.score;
-    // Сброс времени
+    scoreElement.textContent = 0;
     timeLeft = 60;
     timerElement.textContent = timeLeft;
     gameOverElement.style.display = 'none';
 
-    // Новая фигура
     playerReset();
 
-    // Запуск таймера (каждую секунду уменьшается время)
     timerInterval = setInterval(updateTimer, 1000);
-
-    // Запуск игрового цикла
     dropCounter = 0;
     lastTime = 0;
     requestId = requestAnimationFrame(update);
   }
 
-  // Запускаем игру сразу
+  // Запуск сразу
   startGame();
   </script>
 </body>
